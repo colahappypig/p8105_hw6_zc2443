@@ -1,0 +1,13 @@
+---
+title: "p8105_hw6_zc2443"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(modelr)
+library(mgcv)
+```
+

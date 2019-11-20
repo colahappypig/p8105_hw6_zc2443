@@ -11,3 +11,74 @@ library(modelr)
 library(mgcv)
 ```
 
+# Problem 1
+
+```{r}
+birthweight = read_csv("./data/birthweight.csv")
+
+summary(birthweight) # there are no missing data in this dataset
+str(birthweight)
+
+birthweight = birthweight %>% 
+  mutate(
+    babysex = factor(babysex),
+    frace = factor(frace),
+    mrace = factor(mrace),
+    malform = factor(malform)
+  )
+
+fit = lm(bwt ~ delwt + gaweeks + malform + momage + pnumlbw + pnumsga + ppbmi + ppwt + smoken + wtgain,
+         data = birthweight) 
+
+fit %>% broom::tidy()
+
+birthweight %>% 
+  add_residuals(fit) %>% 
+  add_predictions(fit) %>% 
+  ggplot(aes(x = resid, y = pred)) +
+  geom_violin() +
+  labs(
+    x = "Residuals",
+    y = "Predictions"
+  ) +
+  theme_classic()
+```
+
+The model was built on intuitively thinking on what factors might potentially affect baby's birth weight. Predictors such as mother's weight at delivery, presence of malformations that could affect weight, mother’s age at delivery, etc. There is no interaction term presented in the model so that the model is kept parsimonious.
+
+```{r}
+cv_birthweight = crossv_mc(birthweight, 100)
+  
+cv_birthweight = cv_birthweight %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_birthweight = 
+  cv_birthweight %>% 
+  mutate(linear_mod_1  = map(train, ~lm(bwt ~ delwt + gaweeks + malform + momage + pnumlbw + pnumsga + ppbmi + ppwt + smoken + wtgain, data = .x)),
+         linear_mod_2  = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+         linear_mod_3  = map(train, ~lm(bwt ~ bhead * blength * babysex, data = .x))) %>% 
+  mutate(rmse_linear_1 = map2_dbl(linear_mod_1, test, ~rmse(model = .x, data = .y)),
+         rmse_linear_2 = map2_dbl(linear_mod_2, test, ~rmse(model = .x, data = .y)),
+         rmse_linear_3 = map2_dbl(linear_mod_3, test, ~rmse(model = .x, data = .y)))
+
+cv_birthweight %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+From the violin plots we can see that the linear model with covariates head circumference, length, sex, and all interactions between these has the least value of rmse. So this linear model predicts the baby's birthweight the best among all three models.
+
+# Problem 2
+
+```{r}
+
+```
+

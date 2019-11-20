@@ -13,7 +13,7 @@ library(mgcv)
 
 # Problem 1
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 birthweight = read_csv("./data/birthweight.csv")
 
 summary(birthweight) # there are no missing data in this dataset
@@ -46,8 +46,10 @@ birthweight %>%
 
 The model was built on intuitively thinking on what factors might potentially affect baby's birth weight. Predictors such as mother's weight at delivery, presence of malformations that could affect weight, mother’s age at delivery, etc. There is no interaction term presented in the model so that the model is kept parsimonious.
 
-```{r}
-cv_birthweight = crossv_mc(birthweight, 100)
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+
+cv_birthweight = crossv_mc(birthweight, 100) #create 100 training and test datasets for each
   
 cv_birthweight = cv_birthweight %>% 
   mutate(
@@ -59,6 +61,7 @@ cv_birthweight =
   mutate(linear_mod_1  = map(train, ~lm(bwt ~ delwt + gaweeks + malform + momage + pnumlbw + pnumsga + ppbmi + ppwt + smoken + wtgain, data = .x)),
          linear_mod_2  = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
          linear_mod_3  = map(train, ~lm(bwt ~ bhead * blength * babysex, data = .x))) %>% 
+  #fit three models using linear regression model
   mutate(rmse_linear_1 = map2_dbl(linear_mod_1, test, ~rmse(model = .x, data = .y)),
          rmse_linear_2 = map2_dbl(linear_mod_2, test, ~rmse(model = .x, data = .y)),
          rmse_linear_3 = map2_dbl(linear_mod_3, test, ~rmse(model = .x, data = .y)))
@@ -78,7 +81,68 @@ From the violin plots we can see that the linear model with covariates head circ
 
 # Problem 2
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
+set.seed(2)
 
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+
+tran1 = weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::tidy)) %>% 
+  select(-strap, -models) %>% 
+  unnest(results) %>% 
+  select(.id, term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>% 
+  rename(
+    id = .id,
+    intercept = `(Intercept)`
+  ) %>% 
+  mutate(
+    log_b0_b1 = log(intercept*tmin, base = exp(1))
+  )
+
+tran2 = weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::glance)) %>% 
+  select(-strap, -models) %>% 
+  unnest(results) %>% 
+  rename(
+    id = .id,
+    r_squared = r.squared
+  ) %>% 
+  select(
+    id,
+    r_squared
+  )
+
+ggplot(data = tran1, aes(x = log_b0_b1)) + geom_density() + theme_bw()
+
+ggplot(data = tran2, aes(x = r_squared)) + geom_density() + theme_bw()
 ```
+
+Both of the two distribution plots are nearly symmetric. This means that the bootstrap samples didn't capture many outliers from the original dataset.
+
+```{r, warning=FALSE, message=FALSE}
+quantile(tran1$log_b0_b1, c(0.025, 0.975)) #obtain 95% CI for log(b0*b1)
+
+quantile(tran2$r_squared, c(0.025, 0.975)) #obtain 95% CI for r_squared
+```
+
 
